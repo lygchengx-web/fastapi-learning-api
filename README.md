@@ -1,8 +1,34 @@
-# FastAPI learning API
+# Digit classifier API
 
-A small FastAPI app I used to try out Supabase CRUD. It stores numeric inputs in a `learning` table and has a `/predict` endpoint that doubles its input.
+A FastAPI service for classifying batches of 8-by-8 handwritten digits. A model trained on centered digits scored 97.11% on clean examples and 33.67% after a one-pixel horizontal shift. Adding left and right shifts to the training set made the same model much less sensitive to position, at a cost on the clean images.
 
-For a local run, create a table in a Supabase project you control:
+| Logistic regression training set | Clean accuracy | Shifted accuracy |
+| --- | ---: | ---: |
+| Original images | **97.11%** | 33.67% |
+| Original images and left/right shifts | 92.89% | **93.11%** |
+
+Both runs use the same fixed split, with 450 held-out images and 900 shifted variants of those images. The service uses the augmented model. The training script exports the scaler and coefficients as JSON and checks the NumPy inference path against scikit-learn on both test sets before saving the artifact.
+
+```sh
+python -m pip install -r requirements-dev.txt
+python train.py
+python -m unittest -v
+python -m uvicorn serve:app --host 127.0.0.1
+```
+
+Open `http://127.0.0.1:8000/docs` or send two sample images in one request:
+
+```sh
+python -c "import json; from sklearn.datasets import load_digits; print(json.dumps({'images': load_digits().data[:2].astype(int).tolist()}))" | curl -fsS -H "Content-Type: application/json" --data-binary "@-" http://127.0.0.1:8000/v1/predict
+```
+
+Each image is a row-major list of 64 integers from 0 to 16. The service returns a digit and its model probability per image, along with the hash-derived model ID. `/healthz` checks the service process and `/readyz` checks that a model is loaded.
+
+The holdout comes from scikit-learn's `load_digits` dataset, which is drawn from Alpaydin and Kaynak's [Optical Recognition of Handwritten Digits](https://doi.org/10.24432/C50P49). The input format is the dataset's normalized 8-by-8 representation. The score applies to that dataset split.
+
+## Original Supabase exercise
+
+`main:app` is the original local CRUD example. It stores numeric inputs and doubles an input at `/predict`. To run it, create the table in a Supabase project you control:
 
 ```sql
 create table public.learning (
@@ -16,7 +42,7 @@ Set `SUPABASE_URL` and `SUPABASE_KEY` in your shell. For CRUD, the key needs acc
 
 ```sh
 python -m pip install -r requirements.txt
-python -m uvicorn main:app
+python -m uvicorn main:app --host 127.0.0.1
 ```
 
 Open `http://127.0.0.1:8000/docs` to try the endpoints. A POST to `/predict` with `{"x": 3}` returns `{"result": 6.0}`.

@@ -17,12 +17,10 @@ class InputData(BaseModel):
     x: float
 
 
-# learning function
 def learning_function(x: float):
     return 2 * x
 
 
-# Create
 @app.post("/create")
 def create_data(data: InputData):
     response = supabase.table("learning").insert({
@@ -31,14 +29,12 @@ def create_data(data: InputData):
 
     return response.data
 
-# Read all
 @app.get("/read")
 def read_data():
     response = supabase.table("learning").select("*").execute()
     return response.data
 
 
-# Update by id
 @app.put("/update/{id}")
 def update_data(id: int, data: InputData):
     response = supabase.table("learning").update({
@@ -47,13 +43,11 @@ def update_data(id: int, data: InputData):
     return response.data
 
 
-# Delete by id
 @app.delete("/delete/{id}")
 def delete_data(id: int):
     response = supabase.table("learning").delete().eq("id", id).execute()
     return response.data
 
-# Predict
 @app.post("/predict")
 def predict(data: InputData):
     result = learning_function(data.x)
