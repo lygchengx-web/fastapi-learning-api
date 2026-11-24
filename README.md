@@ -1,13 +1,17 @@
-# Digit classifier API
+# Handwritten digit classifier API
 
-A FastAPI service for classifying batches of 8-by-8 handwritten digits. A model trained on centered digits scored 97.11% on clean examples and 33.67% after a one-pixel horizontal shift. Adding left and right shifts to the training set made the same model much less sensitive to position, at a cost on the clean images.
+One FastAPI request classifies up to 64 handwritten digits. Each image is a flattened 8×8 grid. The service loads a JSON artifact and runs inference with NumPy.
 
-| Logistic regression training set | Clean accuracy | Shifted accuracy |
+A one-pixel horizontal shift was enough to drop the baseline's accuracy from 97.11% to 33.67%. Training with left and right shifts improved shifted accuracy to 93.11%, with a lower score on the clean images.
+
+| Logistic regression training data | Clean accuracy | Shifted accuracy |
 | --- | ---: | ---: |
 | Original images | **97.11%** | 33.67% |
-| Original images and left/right shifts | 92.89% | **93.11%** |
+| Original images plus shifts | 92.89% | **93.11%** |
 
-Both runs use the same fixed split, with 450 held-out images and 900 shifted variants of those images. The service uses the augmented model. The training script exports the scaler and coefficients as JSON and checks the NumPy inference path against scikit-learn on both test sets before saving the artifact.
+[`train.py`](train.py) splits the data before augmentation. It uses the same 450 held-out images and their 900 shifted variants for both models. Before saving the augmented model, the script checks that NumPy serving probabilities match scikit-learn on both test sets.
+
+## Try the service
 
 ```sh
 python -m pip install -r requirements-dev.txt
@@ -16,17 +20,24 @@ python -m unittest -v
 python -m uvicorn serve:app --host 127.0.0.1
 ```
 
-Open `http://127.0.0.1:8000/docs` or send two sample images in one request:
+Open `http://127.0.0.1:8000/docs` or classify two sample images from a second terminal.
 
 ```sh
 python -c "import json; from sklearn.datasets import load_digits; print(json.dumps({'images': load_digits().data[:2].astype(int).tolist()}))" | curl -fsS -H "Content-Type: application/json" --data-binary "@-" http://127.0.0.1:8000/v1/predict
 ```
 
-Each image is a row-major list of 64 integers from 0 to 16. The service returns a digit and its model probability per image, along with the hash-derived model ID. `/healthz` checks the service process and `/readyz` checks that a model is loaded.
+| Endpoint | Behavior |
+| --- | --- |
+| `POST /v1/predict` | Takes 1–64 images of 64 integers from 0 to 16. Returns the predicted digit and its probability for each image, plus a model ID derived from the artifact hash. |
+| `GET /healthz` | Reports that the service process is responding. |
+| `GET /readyz` | Reports the loaded model ID or returns 503 when the artifact is missing. |
 
-The holdout comes from scikit-learn's `load_digits` dataset, which is drawn from Alpaydin and Kaynak's [Optical Recognition of Handwritten Digits](https://doi.org/10.24432/C50P49). The input format is the dataset's normalized 8-by-8 representation. The score applies to that dataset split.
+The [HTTP tests](test_api.py) cover batched responses, invalid inputs and missing model artifacts. The input format and scores are for the normalized 8×8 [Optical Recognition of Handwritten Digits dataset](https://doi.org/10.24432/C50P49) distributed by scikit-learn.
 
 ## Original Supabase exercise
+
+<details>
+<summary>Setup for the earlier CRUD example</summary>
 
 `main:app` is the original local CRUD example. It stores numeric inputs and doubles an input at `/predict`. To run it, create the table in a Supabase project you control:
 
@@ -46,3 +57,5 @@ python -m uvicorn main:app --host 127.0.0.1
 ```
 
 Open `http://127.0.0.1:8000/docs` to try the endpoints. A POST to `/predict` with `{"x": 3}` returns `{"result": 6.0}`.
+
+</details>
